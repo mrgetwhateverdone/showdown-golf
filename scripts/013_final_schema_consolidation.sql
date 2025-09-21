@@ -92,8 +92,9 @@ DROP POLICY IF EXISTS "Players can insert their own scores" ON public.match_scor
 CREATE POLICY "Players can insert their own scores" ON public.match_scores
   FOR INSERT WITH CHECK (auth.uid() = player_id);
 
-DROP POLICY IF EXISTS "Players can update their own scores" ON public.match_scores
-  FOR UPDATE USING (auth.uid() = player_id);
+DROP POLICY IF EXISTS "Players can update their own scores" ON public.match_scores;
+CREATE POLICY "Players can update their own scores" ON public.match_scores
+  FOR UPDATE USING (auth.uid() = player_id); -- Added missing semicolon to fix SQL syntax error
 
 -- 7. Create all necessary indexes
 CREATE INDEX IF NOT EXISTS idx_matches_winner ON public.matches(winner);
