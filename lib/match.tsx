@@ -60,6 +60,9 @@ export interface Match {
   createdAt: string
   expiresAt: string
   teams?: Team[] // For 2v1 and 2v2 matches
+  matchType?: string
+  handicapType?: string
+  wagerType?: string
 }
 
 interface MatchContextType {
@@ -242,6 +245,9 @@ export function MatchProvider({ children }: { children: ReactNode }) {
             prizeDistributed: match.status === "completed",
             createdAt: match.created_at,
             expiresAt: match.expires_at,
+            matchType: match.match_type,
+            handicapType: match.handicap_type,
+            wagerType: match.wager_type,
           }
         }),
       )
@@ -335,6 +341,9 @@ export function MatchProvider({ children }: { children: ReactNode }) {
             prizeDistributed: match.status === "completed",
             createdAt: match.created_at,
             expiresAt: match.expires_at,
+            matchType: match.match_type,
+            handicapType: match.handicap_type,
+            wagerType: match.wager_type,
           }
         }),
       )
@@ -355,32 +364,51 @@ export function MatchProvider({ children }: { children: ReactNode }) {
   const createMatch = async (matchData: Partial<Match>): Promise<string> => {
     if (!user) throw new Error("User not authenticated")
 
+    console.log("[v0] Starting match creation with data:", matchData)
+    console.log("[v0] Current user:", { id: user.id, balance: user.balance })
+
     const course = SAMPLE_COURSES.find((c) => c.id === matchData.course?.id) || SAMPLE_COURSES[0]
     const holeCount = matchData.course?.holes || 18
     const maxPlayers = matchData.format === "1v1" ? 2 : matchData.format === "2v1" ? 3 : 4
 
+    console.log("[v0] Course selected:", course)
+    console.log("[v0] Hole count:", holeCount, "Max players:", maxPlayers)
+
     try {
       if (matchData.wager && matchData.wager > 0) {
+        console.log("[v0] Processing wager:", matchData.wager)
+
         if (user.balance < matchData.wager) {
+          console.log("[v0] Insufficient balance - user has:", user.balance, "needs:", matchData.wager)
           throw new Error("Insufficient balance for wager")
         }
 
+        console.log("[v0] Deducting wager from balance...")
         const { error: balanceError } = await supabase
           .from("profiles")
           .update({ balance: user.balance - matchData.wager })
           .eq("id", user.id)
 
-        if (balanceError) throw balanceError
+        if (balanceError) {
+          console.log("[v0] Balance update error:", balanceError)
+          throw balanceError
+        }
 
-        // Record transaction
-        await supabase.from("transactions").insert({
+        console.log("[v0] Recording transaction...")
+        const { error: transactionError } = await supabase.from("transactions").insert({
           user_id: user.id,
           amount: -matchData.wager,
           transaction_type: "wager",
           description: "Match wager deducted",
         })
+
+        if (transactionError) {
+          console.log("[v0] Transaction error:", transactionError)
+          throw transactionError
+        }
       }
 
+      console.log("[v0] Creating match record...")
       const { data: matchResult, error: matchError } = await supabase
         .from("matches")
         .insert({
@@ -394,19 +422,33 @@ export function MatchProvider({ children }: { children: ReactNode }) {
           status: "waiting",
           current_hole: 1,
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          match_type: matchData.isPublic ? "public" : "private",
+          handicap_type: "handicapped",
+          wager_type: matchData.wager && matchData.wager > 0 ? "total" : "fun",
         })
         .select()
         .single()
 
-      if (matchError) throw matchError
+      if (matchError) {
+        console.log("[v0] Match creation error:", matchError)
+        throw matchError
+      }
 
+      console.log("[v0] Match created successfully:", matchResult)
       const matchId = matchResult.id
 
-      await supabase.from("match_participants").insert({
+      console.log("[v0] Adding participant...")
+      const { error: participantError } = await supabase.from("match_participants").insert({
         match_id: matchId,
         user_id: user.id,
       })
 
+      if (participantError) {
+        console.log("[v0] Participant error:", participantError)
+        throw participantError
+      }
+
+      console.log("[v0] Creating holes...")
       const holesData = Array.from({ length: holeCount }, (_, i) => ({
         match_id: matchId,
         hole_number: i + 1,
@@ -414,8 +456,14 @@ export function MatchProvider({ children }: { children: ReactNode }) {
         completed: false,
       }))
 
-      await supabase.from("match_holes").insert(holesData)
+      const { error: holesError } = await supabase.from("match_holes").insert(holesData)
 
+      if (holesError) {
+        console.log("[v0] Holes creation error:", holesError)
+        throw holesError
+      }
+
+      console.log("[v0] Match creation completed successfully!")
       await refreshMatches()
       await refreshPublicMatches()
       return matchId
