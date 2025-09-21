@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-
+import { useEffect } from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -23,11 +23,12 @@ export default function LandingPage() {
   const router = useRouter()
   const { toast } = useToast()
 
-  // Redirect if already logged in
-  if (user) {
-    router.push("/app")
-    return null
-  }
+  useEffect(() => {
+    if (user && !isLoading) {
+      console.log("[v0] User authenticated, redirecting to /app")
+      router.push("/app")
+    }
+  }, [user, isLoading, router])
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,6 +42,7 @@ export default function LandingPage() {
           description: "Invalid email or password",
           variant: "destructive",
         })
+        return // Don't redirect on failed login
       }
     } else {
       if (!username.trim()) {
@@ -66,7 +68,7 @@ export default function LandingPage() {
           description: "Email or username already exists",
           variant: "destructive",
         })
-        return
+        return // Don't redirect on failed signup
       }
       toast({
         title: "Account Created!",
@@ -74,10 +76,21 @@ export default function LandingPage() {
       })
     }
 
-    if (success) {
-      console.log("[v0] Auth successful, redirecting to /app")
-      router.push("/app")
-    }
+    // if (success) {
+    //   console.log("[v0] Auth successful, redirecting to /app")
+    //   router.push("/app")
+    // }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    )
   }
 
   if (showAuth) {

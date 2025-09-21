@@ -180,9 +180,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log("[v0] Signup successful, user created:", data.user.id)
 
         if (data.session) {
-          console.log("[v0] Session available immediately, setting user")
+          console.log("[v0] Session available immediately")
           setSupabaseUser(data.user)
           await fetchUserProfile(data.user.id)
+        } else {
+          console.log("[v0] No session, attempting immediate sign in")
+          // Try to sign in immediately after signup
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          })
+
+          if (signInError) {
+            console.error("[v0] Auto sign-in failed:", signInError)
+            // Still return true as signup was successful
+          } else if (signInData.user) {
+            console.log("[v0] Auto sign-in successful")
+            setSupabaseUser(signInData.user)
+            await fetchUserProfile(signInData.user.id)
+          }
         }
 
         setIsLoading(false)

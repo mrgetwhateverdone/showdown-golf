@@ -136,7 +136,12 @@ export default function FriendsPage() {
                       <CardHeader>
                         <div className="flex justify-between items-start">
                           <div>
-                            <CardTitle>{friend.username}</CardTitle>
+                            <CardTitle
+                              className="cursor-pointer hover:text-blue-600"
+                              onClick={() => router.push(`/app/player/${friend.id}`)}
+                            >
+                              {friend.username}
+                            </CardTitle>
                             <CardDescription>Balance: ${friend.balance}</CardDescription>
                           </div>
                           <Button
@@ -277,7 +282,12 @@ export default function FriendsPage() {
                       {searchResults.map((user) => (
                         <div key={user.id} className="flex justify-between items-center p-3 bg-muted rounded-lg">
                           <div>
-                            <p className="font-semibold">{user.username}</p>
+                            <p
+                              className="font-semibold cursor-pointer hover:text-blue-600"
+                              onClick={() => router.push(`/app/player/${user.id}`)}
+                            >
+                              {user.username}
+                            </p>
                             <p className="text-sm text-muted-foreground">Balance: ${user.balance}</p>
                           </div>
                           <Button
