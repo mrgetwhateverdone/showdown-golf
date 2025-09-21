@@ -20,7 +20,7 @@ export default function AppDashboard() {
     refreshMatches() // Load user's own matches
     refreshPublicMatches() // Load public matches for "Today's Matches" section
     refreshFriends()
-  }, [refreshMatches, refreshPublicMatches])
+  }, [refreshMatches, refreshPublicMatches, refreshFriends]) // Added missing refreshFriends dependency
 
   // Redirect if not logged in
   if (!user) {
