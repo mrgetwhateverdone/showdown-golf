@@ -1,3 +1,6 @@
+-- DEPRECATED: Replaced by scripts/013_final_schema_consolidation.sql
+-- This script has inconsistent foreign key references (auth.users vs public.profiles)
+
 -- Add missing winner column to matches table
 ALTER TABLE public.matches ADD COLUMN IF NOT EXISTS winner UUID REFERENCES public.profiles(id);
 

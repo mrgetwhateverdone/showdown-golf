@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS public.transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   match_id UUID REFERENCES public.matches(id) ON DELETE SET NULL,
-  type TEXT NOT NULL CHECK (type IN ('wager', 'prize', 'refund', 'deposit', 'withdrawal')),
+  transaction_type TEXT NOT NULL CHECK (transaction_type IN ('wager', 'prize', 'refund', 'deposit', 'withdrawal')),
   amount DECIMAL(10,2) NOT NULL,
   description TEXT,
   status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('pending', 'completed', 'failed', 'cancelled')),

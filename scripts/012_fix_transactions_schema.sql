@@ -1,3 +1,6 @@
+-- DEPRECATED: Replaced by scripts/013_final_schema_consolidation.sql
+-- This script conflicts with script 008 column naming
+
 -- Rename type column to transaction_type in transactions table
 ALTER TABLE public.transactions RENAME COLUMN type TO transaction_type;
 
