@@ -4,6 +4,7 @@ import { AuthProvider } from "@/lib/auth"
 import { MatchProvider } from "@/lib/match"
 import { FriendsProvider } from "@/lib/friends"
 import { Suspense } from "react"
+import { Toaster } from "@/components/ui/toaster"
 import "./globals.css"
 
 export const metadata: Metadata = {
@@ -27,6 +28,7 @@ export default function RootLayout({
             </MatchProvider>
           </AuthProvider>
         </Suspense>
+        <Toaster />
       </body>
     </html>
   )

@@ -28,17 +28,19 @@ if (process.env.NODE_ENV === "development") {
   clientPromise = client.connect()
 }
 
-// Database helper functions
-export async function getDatabase(): Promise<Db> {
-  const client = await clientPromise
-  return client.db("golf-showdown")
+let db: Db | null = null
+
+async function getDatabase(): Promise<Db> {
+  if (!db) {
+    const client = await clientPromise
+    db = client.db("golf-showdown")
+  }
+  return db
 }
 
-export async function getCollection(name: string): Promise<Collection> {
-  const db = await getDatabase()
-  return db.collection(name)
+export async function getCollection(collectionName: string): Promise<Collection> {
+  const database = await getDatabase()
+  return database.collection(collectionName)
 }
 
-// Export a module-scoped MongoClient promise. By doing this in a
-// separate module, the client can be shared across functions.
 export default clientPromise

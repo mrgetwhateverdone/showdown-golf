@@ -72,7 +72,7 @@ export default function LandingPage() {
           <Card>
             <CardHeader className="text-center">
               <div className="flex justify-center mb-4">
-                <Image src="/images/showdown-logo.png" alt="Showdown" width={48} height={48} className="w-12 h-12" />
+                <Image src="/images/showdown-logo.jpg" alt="Showdown" width={48} height={48} className="w-12 h-12" />
               </div>
               <CardTitle className="text-2xl font-bold text-primary">
                 {isLogin ? "Welcome Back" : "Join Showdown"}
@@ -149,7 +149,7 @@ export default function LandingPage() {
       <div className="container mx-auto px-4 py-16">
         <div className="text-center mb-16">
           <div className="flex justify-center mb-6">
-            <Image src="/images/showdown-logo.png" alt="Showdown" width={80} height={80} className="w-20 h-20" />
+            <Image src="/images/showdown-logo.jpg" alt="Showdown" width={80} height={80} className="w-20 h-20" />
           </div>
           <h1 className="text-5xl font-bold text-primary mb-4">Showdown</h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">

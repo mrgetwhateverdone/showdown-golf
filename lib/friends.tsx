@@ -51,23 +51,19 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
     const currentUser = JSON.parse(localStorage.getItem("golf-user") || "null")
     if (!currentUser) return
 
-    // Get all users
     const allUsers = JSON.parse(localStorage.getItem("golf-users") || "[]")
 
-    // Get current user's friends
     const userFriends = allUsers.filter(
       (user: User) => currentUser.friends.includes(user.id) && user.id !== currentUser.id,
     )
     setFriends(userFriends)
 
-    // Get friend requests
     const allRequests = JSON.parse(localStorage.getItem("golf-friend-requests") || "[]")
     const userRequests = allRequests.filter(
       (req: FriendRequest) => req.toUserId === currentUser.id || req.fromUserId === currentUser.id,
     )
     setFriendRequests(userRequests)
 
-    // Calculate friend stats
     const matches = JSON.parse(localStorage.getItem("golf-matches") || "[]")
     const stats = allUsers.map((user: User) => {
       const userMatches = matches.filter(
@@ -109,10 +105,8 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
 
     if (!targetUser || targetUser.id === currentUser.id) return false
 
-    // Check if already friends
     if (currentUser.friends.includes(targetUser.id)) return false
 
-    // Check if request already exists
     const existingRequests = JSON.parse(localStorage.getItem("golf-friend-requests") || "[]")
     const existingRequest = existingRequests.find(
       (req: FriendRequest) =>
@@ -148,13 +142,11 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
 
     if (!request || request.toUserId !== currentUser.id) return false
 
-    // Update request status
     const updatedRequests = allRequests.map((req: FriendRequest) =>
       req.id === requestId ? { ...req, status: "accepted" as const } : req,
     )
     localStorage.setItem("golf-friend-requests", JSON.stringify(updatedRequests))
 
-    // Add to friends lists
     const allUsers = JSON.parse(localStorage.getItem("golf-users") || "[]")
     const updatedUsers = allUsers.map((user: User) => {
       if (user.id === currentUser.id) {
@@ -168,7 +160,6 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
 
     localStorage.setItem("golf-users", JSON.stringify(updatedUsers))
 
-    // Update current user in localStorage
     const updatedCurrentUser = { ...currentUser, friends: [...currentUser.friends, request.fromUserId] }
     localStorage.setItem("golf-user", JSON.stringify(updatedCurrentUser))
 
@@ -191,7 +182,6 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
     const currentUser = JSON.parse(localStorage.getItem("golf-user") || "null")
     if (!currentUser) return false
 
-    // Remove from both users' friend lists
     const allUsers = JSON.parse(localStorage.getItem("golf-users") || "[]")
     const updatedUsers = allUsers.map((user: User) => {
       if (user.id === currentUser.id) {
@@ -205,7 +195,6 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
 
     localStorage.setItem("golf-users", JSON.stringify(updatedUsers))
 
-    // Update current user
     const updatedCurrentUser = { ...currentUser, friends: currentUser.friends.filter((id: string) => id !== friendId) }
     localStorage.setItem("golf-user", JSON.stringify(updatedCurrentUser))
 

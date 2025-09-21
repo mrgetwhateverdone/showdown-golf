@@ -20,73 +20,62 @@ interface AuthContextType {
   logout: () => void
   updateUser: (updates: Partial<User>) => Promise<boolean>
   isLoading: boolean
-  token: string | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+const DEMO_USERS_KEY = "golf-users"
+const CURRENT_USER_KEY = "golf-user"
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Check for existing token and user in localStorage
-    const savedToken = localStorage.getItem("golf-token")
-    if (savedToken) {
-      setToken(savedToken)
-      // Verify token and get user data
-      fetchUserData(savedToken)
-    } else {
-      setIsLoading(false)
+    // Check for existing user in localStorage
+    const savedUser = localStorage.getItem(CURRENT_USER_KEY)
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser))
+      } catch (error) {
+        console.error("Failed to parse saved user:", error)
+        localStorage.removeItem(CURRENT_USER_KEY)
+      }
     }
+    setIsLoading(false)
   }, [])
 
-  const fetchUserData = async (authToken: string) => {
+  const getStoredUsers = (): User[] => {
     try {
-      const response = await fetch("/api/auth/me", {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setUser(data.user)
-      } else {
-        // Token is invalid, clear it
-        localStorage.removeItem("golf-token")
-        setToken(null)
-      }
-    } catch (error) {
-      console.error("Failed to fetch user data:", error)
-      localStorage.removeItem("golf-token")
-      setToken(null)
-    } finally {
-      setIsLoading(false)
+      const users = localStorage.getItem(DEMO_USERS_KEY)
+      return users ? JSON.parse(users) : []
+    } catch {
+      return []
     }
   }
 
+  const saveStoredUsers = (users: User[]) => {
+    localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(users))
+  }
+
   const updateUser = async (updates: Partial<User>): Promise<boolean> => {
-    if (!token) return false
+    if (!user) return false
 
     try {
       setIsLoading(true)
-      const response = await fetch("/api/auth/update", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(updates),
-      })
+      const updatedUser = { ...user, ...updates }
+      setUser(updatedUser)
+      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedUser))
 
-      if (response.ok) {
-        const data = await response.json()
-        setUser(data.user)
-        return true
+      // Update in stored users as well
+      const users = getStoredUsers()
+      const userIndex = users.findIndex((u) => u.id === user.id)
+      if (userIndex >= 0) {
+        users[userIndex] = updatedUser
+        saveStoredUsers(users)
       }
-      return false
+
+      return true
     } catch (error) {
       console.error("Failed to update user:", error)
       return false
@@ -99,23 +88,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true)
 
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      })
+      console.log("[v0] Starting login process", { email })
 
-      if (response.ok) {
-        const data = await response.json()
-        setUser(data.user)
-        setToken(data.token)
-        localStorage.setItem("golf-token", data.token)
+      // Simulate API delay
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
+      const users = getStoredUsers()
+      const foundUser = users.find((u) => u.email === email)
+
+      if (foundUser) {
+        console.log("[v0] User found, logging in")
+        setUser(foundUser)
+        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(foundUser))
         setIsLoading(false)
         return true
       }
 
+      console.log("[v0] User not found")
       setIsLoading(false)
       return false
     } catch (error) {
@@ -129,25 +118,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true)
 
     try {
-      const response = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password, username }),
-      })
+      console.log("[v0] Starting signup process", { email, username })
 
-      if (response.ok) {
-        const data = await response.json()
-        setUser(data.user)
-        setToken(data.token)
-        localStorage.setItem("golf-token", data.token)
+      // Simulate API delay
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
+      const users = getStoredUsers()
+
+      // Check if user already exists
+      const existingUser = users.find((u) => u.email === email || u.username === username)
+      if (existingUser) {
+        console.log("[v0] User already exists")
         setIsLoading(false)
-        return true
+        return false
       }
 
+      // Create new user
+      const newUser: User = {
+        id: `user_${Date.now()}`,
+        email,
+        username,
+        balance: 1000,
+        handicap: 0,
+        friends: [],
+        createdAt: new Date().toISOString(),
+      }
+
+      console.log("[v0] Creating new user:", newUser)
+
+      // Save to storage
+      users.push(newUser)
+      saveStoredUsers(users)
+
+      // Set as current user
+      setUser(newUser)
+      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(newUser))
+
       setIsLoading(false)
-      return false
+      return true
     } catch (error) {
       console.error("Signup error:", error)
       setIsLoading(false)
@@ -157,8 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null)
-    setToken(null)
-    localStorage.removeItem("golf-token")
+    localStorage.removeItem(CURRENT_USER_KEY)
   }
 
   return (
@@ -170,7 +177,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         updateUser,
         isLoading,
-        token,
       }}
     >
       {children}
