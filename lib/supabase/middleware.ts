@@ -35,12 +35,9 @@ export async function updateSession(request: NextRequest) {
 
   if (
     !user &&
-    !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/signup") &&
-    request.nextUrl.pathname !== "/" &&
     request.nextUrl.pathname.startsWith("/app") // Only protect /app routes
   ) {
-    // no user, redirect to homepage instead of login page
+    // no user, redirect to homepage
     const url = request.nextUrl.clone()
     url.pathname = "/"
     return NextResponse.redirect(url)
