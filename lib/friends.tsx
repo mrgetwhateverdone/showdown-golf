@@ -143,7 +143,7 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
           const { data: userMatches } = await supabase
             .from("matches")
             .select("id, winner, wager_amount, status")
-            .or(`created_by.eq.${profile.id},match_participants.user_id.eq.${profile.id}`)
+            .or(`created_by.eq."${profile.id}",match_participants.user_id.eq."${profile.id}"`)
             .eq("status", "completed")
 
           const matchesPlayed = userMatches?.length || 0

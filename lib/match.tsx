@@ -189,7 +189,7 @@ export function MatchProvider({ children }: { children: ReactNode }) {
             )
           )
         `)
-        .or(`created_by.eq.${user.id},match_participants.user_id.eq.${user.id}`)
+        .or(`created_by.eq."${user.id}",match_participants.user_id.eq."${user.id}"`)
         .order("created_at", { ascending: false })
 
       if (error) {

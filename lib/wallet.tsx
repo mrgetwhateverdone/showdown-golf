@@ -108,7 +108,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const { data: matchStats } = await supabase
         .from("matches")
         .select("id, winner, status")
-        .or(`created_by.eq.${user.id},match_participants.user_id.eq.${user.id}`)
+        .or(`created_by.eq."${user.id}",match_participants.user_id.eq."${user.id}"`)
         .eq("status", "completed")
 
       const matchesPlayed = matchStats?.length || 0
