@@ -223,7 +223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/app`,
+          emailRedirectTo: `${typeof window !== "undefined" ? window.location.origin : "https://v0-golf-app-showdown-93e20r8lm-sirs-projects-de5e3125.vercel.app"}/auth/callback?next=/app`,
           data: {
             display_name: username,
             full_name: fullName,
