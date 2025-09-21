@@ -424,7 +424,7 @@ export function MatchProvider({ children }: { children: ReactNode }) {
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           match_type: matchData.isPublic ? "public" : "private",
           handicap_type: "handicapped",
-          wager_type: matchData.wager && matchData.wager > 0 ? "total" : "fun",
+          wager_type: "winner_takes_all",
         })
         .select()
         .single()
