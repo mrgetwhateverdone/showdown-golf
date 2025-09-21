@@ -5,7 +5,7 @@ import { BottomNav } from "@/components/bottom-nav"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ChevronRight, MapPin, Target, Users, LogOut } from "lucide-react"
+import { ChevronRight, MapPin, Target, Users } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 import { useMatch } from "@/lib/match"
 import { useRouter } from "next/navigation"
@@ -240,14 +240,16 @@ export default function ProfilePage() {
 
         {/* Logout */}
         <div className="pt-8">
-          <Button
-            variant="ghost"
-            className="w-full justify-center text-red-600 hover:text-red-700 hover:bg-red-50"
+          <button
+            className="w-full flex items-center justify-center space-x-2 text-red-600 hover:text-red-700 py-4 transition-colors"
             onClick={handleLogout}
           >
-            <LogOut className="w-4 h-4 mr-2" />
-            Logout
-          </Button>
+            <span className="text-base font-medium">Logout</span>
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M7 17L17 7" />
+              <path d="M7 7h10v10" />
+            </svg>
+          </button>
         </div>
       </div>
 

@@ -13,24 +13,22 @@ import { AppHeader } from "@/components/app-header"
 
 export default function BrowseMatches() {
   const { user } = useAuth()
-  const { matches, joinMatch, refreshMatches } = useMatch()
+  const { publicMatches, joinMatch, refreshPublicMatches, isLoadingPublic } = useMatch()
   const router = useRouter()
   const { toast } = useToast()
 
   useEffect(() => {
-    refreshMatches()
-  }, [])
+    refreshPublicMatches()
+  }, [refreshPublicMatches])
 
   if (!user) {
     router.push("/")
     return null
   }
 
-  const availableMatches = matches.filter(
+  const availableMatches = publicMatches.filter(
     (match) =>
-      match.status === "waiting" &&
-      !match.players.some((p) => p.id === user.id) &&
-      match.players.length < match.maxPlayers,
+      match.status === "waiting" && match.players.length < match.maxPlayers && new Date(match.expiresAt) > new Date(), // Also filter expired matches
   )
 
   const handleJoinMatch = async (matchId: string) => {
@@ -48,6 +46,22 @@ export default function BrowseMatches() {
         variant: "destructive",
       })
     }
+  }
+
+  if (isLoadingPublic) {
+    return (
+      <div className="min-h-screen bg-background pb-20">
+        <AppHeader />
+        <div className="container mx-auto px-4 py-8">
+          <h1 className="text-2xl font-bold text-primary mb-6">Browse Matches</h1>
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <span className="ml-2">Loading matches...</span>
+          </div>
+        </div>
+        <BottomNav />
+      </div>
+    )
   }
 
   return (

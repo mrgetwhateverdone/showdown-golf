@@ -65,6 +65,10 @@ export interface Match {
 interface MatchContextType {
   matches: Match[]
   currentMatch: Match | null
+  publicMatches: Match[]
+  userMatches: Match[]
+  isLoadingPublic: boolean
+  refreshPublicMatches: () => Promise<void>
   createMatch: (matchData: Partial<Match>) => Promise<string>
   createBotMatch: (matchData: Partial<Match>) => Promise<string>
   joinMatch: (matchId: string, playerId: string) => Promise<boolean>
@@ -147,12 +151,16 @@ const SAMPLE_COURSES: Course[] = [
 export function MatchProvider({ children }: { children: ReactNode }) {
   const [matches, setMatches] = useState<Match[]>([])
   const [currentMatch, setCurrentMatch] = useState<Match | null>(null)
+  const [publicMatches, setPublicMatches] = useState<Match[]>([])
+  const [userMatches, setUserMatches] = useState<Match[]>([])
+  const [isLoadingPublic, setIsLoadingPublic] = useState(false)
   const { user } = useAuth()
   const supabase = createClient()
 
   useEffect(() => {
     if (user) {
       refreshMatches()
+      refreshPublicMatches()
     }
   }, [user])
 
@@ -238,9 +246,109 @@ export function MatchProvider({ children }: { children: ReactNode }) {
         }),
       )
 
+      setUserMatches(transformedMatches)
       setMatches(transformedMatches)
     } catch (error) {
       console.error("[v0] Error in refreshMatches:", error)
+    }
+  }
+
+  const refreshPublicMatches = async () => {
+    if (!user) return
+
+    setIsLoadingPublic(true)
+
+    try {
+      // Fetch ALL public matches that are available to join
+      const { data: matchesData, error } = await supabase
+        .from("matches")
+        .select(`
+          *,
+          match_participants(
+            user_id,
+            profiles(display_name)
+          ),
+          match_holes(
+            id,
+            hole_number,
+            par,
+            completed,
+            match_scores(
+              id,
+              player_id,
+              strokes,
+              confirmed
+            )
+          )
+        `)
+        .eq("status", "waiting") // Only fetch matches waiting for players
+        .gt("expires_at", new Date().toISOString()) // Only non-expired matches
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        console.error("[v0] Error fetching public matches:", error)
+        return
+      }
+
+      // Transform the database results into Match objects
+      const transformedMatches: Match[] = await Promise.all(
+        matchesData.map(async (match) => {
+          // Get participants with their profile info
+          const participants = match.match_participants || []
+
+          const players: Player[] = participants.map((p: any) => ({
+            id: p.user_id,
+            username: p.profiles?.display_name || "Unknown",
+            ready: match.status !== "waiting",
+          }))
+
+          // Get course info
+          const course = SAMPLE_COURSES.find((c) => c.id === match.course_id) || SAMPLE_COURSES[0]
+
+          // Transform holes data
+          const holes: Hole[] =
+            match.match_holes?.map((hole: any) => ({
+              number: hole.hole_number,
+              par: hole.par,
+              completed: hole.completed,
+              scores:
+                hole.match_scores?.map((score: any) => ({
+                  playerId: score.player_id,
+                  strokes: score.strokes,
+                  confirmed: score.confirmed,
+                })) || [],
+            })) || []
+
+          return {
+            id: match.id,
+            creatorId: match.creator_id,
+            gameType: match.game_type as GameType,
+            format: match.format as MatchFormat,
+            course,
+            players,
+            maxPlayers: match.max_players,
+            wager: Number(match.wager_amount),
+            status: match.status as MatchStatus,
+            currentHole: match.current_hole,
+            holes,
+            winner: match.winner,
+            prizeDistributed: match.status === "completed",
+            createdAt: match.created_at,
+            expiresAt: match.expires_at,
+          }
+        }),
+      )
+
+      // Filter out matches where current user is already participating
+      const availablePublicMatches = transformedMatches.filter(
+        (match) => !match.players.some((player) => player.id === user.id),
+      )
+
+      setPublicMatches(availablePublicMatches)
+    } catch (error) {
+      console.error("[v0] Error in refreshPublicMatches:", error)
+    } finally {
+      setIsLoadingPublic(false)
     }
   }
 
@@ -309,6 +417,7 @@ export function MatchProvider({ children }: { children: ReactNode }) {
       await supabase.from("match_holes").insert(holesData)
 
       await refreshMatches()
+      await refreshPublicMatches()
       return matchId
     } catch (error) {
       console.error("[v0] Error creating match:", error)
@@ -364,6 +473,7 @@ export function MatchProvider({ children }: { children: ReactNode }) {
       if (participantError) return false
 
       await refreshMatches()
+      await refreshPublicMatches()
       return true
     } catch (error) {
       console.error("[v0] Error joining match:", error)
@@ -587,6 +697,10 @@ export function MatchProvider({ children }: { children: ReactNode }) {
       value={{
         matches,
         currentMatch,
+        publicMatches,
+        userMatches,
+        isLoadingPublic,
+        refreshPublicMatches,
         createMatch,
         createBotMatch,
         joinMatch,

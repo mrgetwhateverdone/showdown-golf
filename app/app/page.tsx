@@ -13,13 +13,14 @@ import { useEffect } from "react"
 export default function AppDashboard() {
   const { user } = useAuth()
   const router = useRouter()
-  const { matches, refreshMatches } = useMatch()
+  const { matches, publicMatches, refreshMatches, refreshPublicMatches } = useMatch()
   const { refreshFriends } = useFriends()
 
   useEffect(() => {
-    refreshMatches()
+    refreshMatches() // Load user's own matches
+    refreshPublicMatches() // Load public matches for "Today's Matches" section
     refreshFriends()
-  }, [])
+  }, [refreshMatches, refreshPublicMatches])
 
   // Redirect if not logged in
   if (!user) {
@@ -33,12 +34,12 @@ export default function AppDashboard() {
       (match.status === "waiting" || match.status === "ready" || match.status === "in-progress"),
   )
 
-  const todaysMatches = matches.filter(
+  const todaysMatches = publicMatches.filter(
     (match) =>
       match.status === "waiting" &&
-      !match.players.some((p) => p.id === user.id) &&
       match.players.length < match.maxPlayers &&
-      new Date(match.createdAt).toDateString() === new Date().toDateString(),
+      new Date(match.createdAt).toDateString() === new Date().toDateString() &&
+      new Date(match.expiresAt) > new Date(), // Also check expiration
   )
 
   return (
