@@ -189,7 +189,7 @@ export function MatchProvider({ children }: { children: ReactNode }) {
             )
           )
         `)
-        .or(`creator_id.eq.${user.id},match_participants.user_id.eq.${user.id}`)
+        .or(`created_by.eq.${user.id},match_participants.user_id.eq.${user.id}`)
         .order("created_at", { ascending: false })
 
       if (error) {
@@ -231,7 +231,7 @@ export function MatchProvider({ children }: { children: ReactNode }) {
 
           return {
             id: match.id,
-            creatorId: match.creator_id,
+            creatorId: match.created_by,
             gameType: match.game_type as GameType,
             format: match.format as MatchFormat,
             course,
@@ -327,7 +327,7 @@ export function MatchProvider({ children }: { children: ReactNode }) {
 
           return {
             id: match.id,
-            creatorId: match.creator_id,
+            creatorId: match.created_by,
             gameType: match.game_type as GameType,
             format: match.format as MatchFormat,
             course,
@@ -412,7 +412,7 @@ export function MatchProvider({ children }: { children: ReactNode }) {
       const { data: matchResult, error: matchError } = await supabase
         .from("matches")
         .insert({
-          creator_id: user.id,
+          created_by: user.id,
           game_type: matchData.gameType || "stroke-play",
           format: matchData.format || "1v1",
           course_id: course.id,
