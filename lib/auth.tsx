@@ -1,6 +1,8 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { createClient } from "@/lib/supabase/client"
+import type { User as SupabaseUser } from "@supabase/supabase-js"
 
 export interface User {
   id: string
@@ -15,72 +17,81 @@ export interface User {
 
 interface AuthContextType {
   user: User | null
+  supabaseUser: SupabaseUser | null
   login: (email: string, password: string) => Promise<boolean>
   signup: (email: string, password: string, username: string) => Promise<boolean>
-  logout: () => void
+  logout: () => Promise<void>
   updateUser: (updates: Partial<User>) => Promise<boolean>
   isLoading: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-const DEMO_USERS_KEY = "golf-users"
-const CURRENT_USER_KEY = "golf-user"
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const supabase = createClient()
 
   useEffect(() => {
-    // Check for existing user in localStorage
-    const savedUser = localStorage.getItem(CURRENT_USER_KEY)
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser))
-      } catch (error) {
-        console.error("Failed to parse saved user:", error)
-        localStorage.removeItem(CURRENT_USER_KEY)
+    // Get initial session
+    const getInitialSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      if (session?.user) {
+        setSupabaseUser(session.user)
+        await fetchUserProfile(session.user.id)
       }
+      setIsLoading(false)
     }
-    setIsLoading(false)
+
+    getInitialSession()
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("[v0] Auth state changed:", event, session?.user?.id)
+
+      if (session?.user) {
+        setSupabaseUser(session.user)
+        await fetchUserProfile(session.user.id)
+      } else {
+        setSupabaseUser(null)
+        setUser(null)
+      }
+      setIsLoading(false)
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
-  const getStoredUsers = (): User[] => {
+  const fetchUserProfile = async (userId: string) => {
     try {
-      const users = localStorage.getItem(DEMO_USERS_KEY)
-      return users ? JSON.parse(users) : []
-    } catch {
-      return []
-    }
-  }
+      const { data: profile, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
 
-  const saveStoredUsers = (users: User[]) => {
-    localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(users))
-  }
-
-  const updateUser = async (updates: Partial<User>): Promise<boolean> => {
-    if (!user) return false
-
-    try {
-      setIsLoading(true)
-      const updatedUser = { ...user, ...updates }
-      setUser(updatedUser)
-      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedUser))
-
-      // Update in stored users as well
-      const users = getStoredUsers()
-      const userIndex = users.findIndex((u) => u.id === user.id)
-      if (userIndex >= 0) {
-        users[userIndex] = updatedUser
-        saveStoredUsers(users)
+      if (error) {
+        console.error("[v0] Error fetching profile:", error)
+        return
       }
 
-      return true
+      if (profile) {
+        // Convert database profile to User format
+        const userData: User = {
+          id: profile.id,
+          email: profile.email,
+          username: profile.display_name,
+          balance: Number(profile.balance),
+          handicap: profile.handicap || 0,
+          homeCourse: profile.home_course,
+          friends: [], // Will be populated by friends system
+          createdAt: profile.created_at,
+        }
+        setUser(userData)
+      }
     } catch (error) {
-      console.error("Failed to update user:", error)
-      return false
-    } finally {
-      setIsLoading(false)
+      console.error("[v0] Error in fetchUserProfile:", error)
     }
   }
 
@@ -90,25 +101,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log("[v0] Starting login process", { email })
 
-      // Simulate API delay
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-      const users = getStoredUsers()
-      const foundUser = users.find((u) => u.email === email)
+      if (error) {
+        console.error("[v0] Login error:", error)
+        setIsLoading(false)
+        return false
+      }
 
-      if (foundUser) {
-        console.log("[v0] User found, logging in")
-        setUser(foundUser)
-        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(foundUser))
+      if (data.user) {
+        console.log("[v0] Login successful")
+        setSupabaseUser(data.user)
+        await fetchUserProfile(data.user.id)
         setIsLoading(false)
         return true
       }
 
-      console.log("[v0] User not found")
       setIsLoading(false)
       return false
     } catch (error) {
-      console.error("Login error:", error)
+      console.error("[v0] Login exception:", error)
       setIsLoading(false)
       return false
     }
@@ -120,58 +135,97 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log("[v0] Starting signup process", { email, username })
 
-      // Simulate API delay
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/app`,
+          data: {
+            display_name: username,
+            handicap: 0,
+          },
+        },
+      })
 
-      const users = getStoredUsers()
-
-      // Check if user already exists
-      const existingUser = users.find((u) => u.email === email || u.username === username)
-      if (existingUser) {
-        console.log("[v0] User already exists")
+      if (error) {
+        console.error("[v0] Signup error:", error)
         setIsLoading(false)
         return false
       }
 
-      // Create new user
-      const newUser: User = {
-        id: `user_${Date.now()}`,
-        email,
-        username,
-        balance: 1000,
-        handicap: 0,
-        friends: [],
-        createdAt: new Date().toISOString(),
+      if (data.user) {
+        console.log("[v0] Signup successful, user created:", data.user.id)
+
+        // For development, we might not have email confirmation enabled
+        // so we can immediately fetch the profile
+        if (data.session) {
+          setSupabaseUser(data.user)
+          await fetchUserProfile(data.user.id)
+        }
+
+        setIsLoading(false)
+        return true
       }
 
-      console.log("[v0] Creating new user:", newUser)
-
-      // Save to storage
-      users.push(newUser)
-      saveStoredUsers(users)
-
-      // Set as current user
-      setUser(newUser)
-      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(newUser))
-
       setIsLoading(false)
-      return true
+      return false
     } catch (error) {
-      console.error("Signup error:", error)
+      console.error("[v0] Signup exception:", error)
       setIsLoading(false)
       return false
     }
   }
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut()
     setUser(null)
-    localStorage.removeItem(CURRENT_USER_KEY)
+    setSupabaseUser(null)
+  }
+
+  const updateUser = async (updates: Partial<User>): Promise<boolean> => {
+    if (!user || !supabaseUser) return false
+
+    try {
+      setIsLoading(true)
+
+      // Map User fields to database fields
+      const profileUpdates: any = {}
+      if (updates.username) profileUpdates.display_name = updates.username
+      if (updates.balance !== undefined) profileUpdates.balance = updates.balance
+      if (updates.handicap !== undefined) profileUpdates.handicap = updates.handicap
+      if (updates.homeCourse !== undefined) profileUpdates.home_course = updates.homeCourse
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          ...profileUpdates,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id)
+
+      if (error) {
+        console.error("[v0] Error updating profile:", error)
+        return false
+      }
+
+      // Update local user state
+      const updatedUser = { ...user, ...updates }
+      setUser(updatedUser)
+
+      return true
+    } catch (error) {
+      console.error("[v0] Error in updateUser:", error)
+      return false
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
     <AuthContext.Provider
       value={{
         user,
+        supabaseUser,
         login,
         signup,
         logout,

@@ -1,6 +1,8 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { createClient } from "@/lib/supabase/client"
+import { useAuth } from "@/lib/auth"
 import type { User } from "./auth"
 
 export interface FriendRequest {
@@ -31,7 +33,7 @@ interface FriendsContextType {
   acceptFriendRequest: (requestId: string) => Promise<boolean>
   declineFriendRequest: (requestId: string) => Promise<boolean>
   removeFriend: (friendId: string) => Promise<boolean>
-  searchUsers: (query: string) => User[]
+  searchUsers: (query: string) => Promise<User[]>
   getFriendStats: (userId: string) => FriendStats | null
   refreshFriends: () => void
 }
@@ -42,180 +44,287 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
   const [friends, setFriends] = useState<User[]>([])
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([])
   const [friendStats, setFriendStats] = useState<FriendStats[]>([])
+  const { user } = useAuth()
+  const supabase = createClient()
 
   useEffect(() => {
-    refreshFriends()
-  }, [])
+    if (user) {
+      refreshFriends()
+    }
+  }, [user])
 
-  const refreshFriends = () => {
-    const currentUser = JSON.parse(localStorage.getItem("golf-user") || "null")
-    if (!currentUser) return
+  const refreshFriends = async () => {
+    if (!user) return
 
-    const allUsers = JSON.parse(localStorage.getItem("golf-users") || "[]")
+    try {
+      const { data: friendsData, error: friendsError } = await supabase
+        .from("friends")
+        .select(`
+          friend_id,
+          profiles!friends_friend_id_fkey(
+            id,
+            email,
+            display_name,
+            balance,
+            handicap,
+            created_at
+          )
+        `)
+        .eq("user_id", user.id)
 
-    const userFriends = allUsers.filter(
-      (user: User) => currentUser.friends.includes(user.id) && user.id !== currentUser.id,
-    )
-    setFriends(userFriends)
+      if (friendsError) {
+        console.error("[v0] Error fetching friends:", friendsError)
+        return
+      }
 
-    const allRequests = JSON.parse(localStorage.getItem("golf-friend-requests") || "[]")
-    const userRequests = allRequests.filter(
-      (req: FriendRequest) => req.toUserId === currentUser.id || req.fromUserId === currentUser.id,
-    )
-    setFriendRequests(userRequests)
+      const friendsList: User[] =
+        friendsData?.map((f) => ({
+          id: f.friend_id,
+          email: (f.profiles as any)?.email || "",
+          username: (f.profiles as any)?.display_name || "Unknown",
+          balance: Number((f.profiles as any)?.balance || 0),
+          handicap: (f.profiles as any)?.handicap || 0,
+          friends: [], // Not needed for friend display
+          createdAt: (f.profiles as any)?.created_at || new Date().toISOString(),
+        })) || []
 
-    const matches = JSON.parse(localStorage.getItem("golf-matches") || "[]")
-    const stats = allUsers.map((user: User) => {
-      const userMatches = matches.filter(
-        (match: any) => match.players.some((p: any) => p.id === user.id) && match.status === "completed",
+      setFriends(friendsList)
+
+      const { data: requestsData, error: requestsError } = await supabase
+        .from("friend_requests")
+        .select(`
+          id,
+          from_user_id,
+          to_user_id,
+          status,
+          created_at,
+          from_profile:profiles!friend_requests_from_user_id_fkey(display_name),
+          to_profile:profiles!friend_requests_to_user_id_fkey(display_name)
+        `)
+        .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
+        .eq("status", "pending")
+
+      if (requestsError) {
+        console.error("[v0] Error fetching friend requests:", requestsError)
+        return
+      }
+
+      const requestsList: FriendRequest[] =
+        requestsData?.map((r) => ({
+          id: r.id,
+          fromUserId: r.from_user_id,
+          fromUsername: (r.from_profile as any)?.display_name || "Unknown",
+          toUserId: r.to_user_id,
+          toUsername: (r.to_profile as any)?.display_name || "Unknown",
+          status: r.status as "pending",
+          createdAt: r.created_at,
+        })) || []
+
+      setFriendRequests(requestsList)
+
+      await calculateFriendStats()
+    } catch (error) {
+      console.error("[v0] Error in refreshFriends:", error)
+    }
+  }
+
+  const calculateFriendStats = async () => {
+    if (!user) return
+
+    try {
+      // Get all profiles for stats calculation
+      const { data: profiles } = await supabase.from("profiles").select("id, display_name, balance, created_at")
+
+      if (!profiles) return
+
+      const stats: FriendStats[] = await Promise.all(
+        profiles.map(async (profile) => {
+          // Get matches for this user
+          const { data: userMatches } = await supabase
+            .from("matches")
+            .select("id, winner, wager_amount, status")
+            .or(`creator_id.eq.${profile.id},match_participants.user_id.eq.${profile.id}`)
+            .eq("status", "completed")
+
+          const matchesPlayed = userMatches?.length || 0
+          const matchesWon = userMatches?.filter((m) => m.winner === profile.id).length || 0
+
+          // Calculate total earnings from transactions
+          const { data: transactions } = await supabase
+            .from("transactions")
+            .select("amount")
+            .eq("user_id", profile.id)
+            .eq("transaction_type", "winnings")
+
+          const totalEarnings = transactions?.reduce((sum, t) => sum + Number(t.amount), 0) || 0
+
+          return {
+            userId: profile.id,
+            username: profile.display_name || "Unknown",
+            matchesPlayed,
+            matchesWon,
+            totalEarnings,
+            averageScore: 0, // Would need more complex calculation from match_scores
+            lastActive: profile.created_at, // Mock - would need actual activity tracking
+          }
+        }),
       )
 
-      const matchesWon = userMatches.filter((match: any) => match.winner === user.id).length
-      const totalStrokes = userMatches.reduce((sum: number, match: any) => {
-        const playerHoles = match.holes.filter((hole: any) =>
-          hole.scores.some((score: any) => score.playerId === user.id),
-        )
-        const playerStrokes = playerHoles.reduce((holeSum: number, hole: any) => {
-          const score = hole.scores.find((s: any) => s.playerId === user.id)
-          return holeSum + (score?.strokes || 0)
-        }, 0)
-        return sum + playerStrokes
-      }, 0)
-
-      return {
-        userId: user.id,
-        username: user.username,
-        matchesPlayed: userMatches.length,
-        matchesWon,
-        totalEarnings: user.balance - 1000, // Subtract starting balance
-        averageScore: userMatches.length > 0 ? Math.round(totalStrokes / (userMatches.length * 18)) : 0,
-        lastActive: new Date().toISOString(), // Mock last active
-      }
-    })
-
-    setFriendStats(stats)
+      setFriendStats(stats)
+    } catch (error) {
+      console.error("[v0] Error calculating friend stats:", error)
+    }
   }
 
   const sendFriendRequest = async (username: string): Promise<boolean> => {
-    const currentUser = JSON.parse(localStorage.getItem("golf-user") || "null")
-    if (!currentUser) return false
+    if (!user) return false
 
-    const allUsers = JSON.parse(localStorage.getItem("golf-users") || "[]")
-    const targetUser = allUsers.find((user: User) => user.username === username)
+    try {
+      const { data: targetUser, error: userError } = await supabase
+        .from("profiles")
+        .select("id, display_name")
+        .eq("display_name", username)
+        .single()
 
-    if (!targetUser || targetUser.id === currentUser.id) return false
+      if (userError || !targetUser || targetUser.id === user.id) return false
 
-    if (currentUser.friends.includes(targetUser.id)) return false
+      // Check if already friends
+      const { data: existingFriend } = await supabase
+        .from("friends")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("friend_id", targetUser.id)
+        .single()
 
-    const existingRequests = JSON.parse(localStorage.getItem("golf-friend-requests") || "[]")
-    const existingRequest = existingRequests.find(
-      (req: FriendRequest) =>
-        (req.fromUserId === currentUser.id && req.toUserId === targetUser.id) ||
-        (req.fromUserId === targetUser.id && req.toUserId === currentUser.id),
-    )
+      if (existingFriend) return false
 
-    if (existingRequest) return false
+      // Check for existing request
+      const { data: existingRequest } = await supabase
+        .from("friend_requests")
+        .select("id")
+        .or(
+          `and(from_user_id.eq.${user.id},to_user_id.eq.${targetUser.id}),and(from_user_id.eq.${targetUser.id},to_user_id.eq.${user.id})`,
+        )
+        .eq("status", "pending")
+        .single()
 
-    const newRequest: FriendRequest = {
-      id: Date.now().toString(),
-      fromUserId: currentUser.id,
-      fromUsername: currentUser.username,
-      toUserId: targetUser.id,
-      toUsername: targetUser.username,
-      status: "pending",
-      createdAt: new Date().toISOString(),
+      if (existingRequest) return false
+
+      const { error: requestError } = await supabase.from("friend_requests").insert({
+        from_user_id: user.id,
+        to_user_id: targetUser.id,
+        status: "pending",
+      })
+
+      if (requestError) return false
+
+      await refreshFriends()
+      return true
+    } catch (error) {
+      console.error("[v0] Error sending friend request:", error)
+      return false
     }
-
-    const updatedRequests = [...existingRequests, newRequest]
-    localStorage.setItem("golf-friend-requests", JSON.stringify(updatedRequests))
-
-    refreshFriends()
-    return true
   }
 
   const acceptFriendRequest = async (requestId: string): Promise<boolean> => {
-    const currentUser = JSON.parse(localStorage.getItem("golf-user") || "null")
-    if (!currentUser) return false
+    if (!user) return false
 
-    const allRequests = JSON.parse(localStorage.getItem("golf-friend-requests") || "[]")
-    const request = allRequests.find((req: FriendRequest) => req.id === requestId)
+    try {
+      const { data: request, error: requestError } = await supabase
+        .from("friend_requests")
+        .select("from_user_id, to_user_id")
+        .eq("id", requestId)
+        .eq("to_user_id", user.id)
+        .single()
 
-    if (!request || request.toUserId !== currentUser.id) return false
+      if (requestError || !request) return false
 
-    const updatedRequests = allRequests.map((req: FriendRequest) =>
-      req.id === requestId ? { ...req, status: "accepted" as const } : req,
-    )
-    localStorage.setItem("golf-friend-requests", JSON.stringify(updatedRequests))
+      const { error: updateError } = await supabase
+        .from("friend_requests")
+        .update({ status: "accepted" })
+        .eq("id", requestId)
 
-    const allUsers = JSON.parse(localStorage.getItem("golf-users") || "[]")
-    const updatedUsers = allUsers.map((user: User) => {
-      if (user.id === currentUser.id) {
-        return { ...user, friends: [...user.friends, request.fromUserId] }
-      }
-      if (user.id === request.fromUserId) {
-        return { ...user, friends: [...user.friends, currentUser.id] }
-      }
-      return user
-    })
+      if (updateError) return false
 
-    localStorage.setItem("golf-users", JSON.stringify(updatedUsers))
+      // Create bidirectional friendship
+      const { error: friendError } = await supabase.from("friends").insert([
+        { user_id: user.id, friend_id: request.from_user_id },
+        { user_id: request.from_user_id, friend_id: user.id },
+      ])
 
-    const updatedCurrentUser = { ...currentUser, friends: [...currentUser.friends, request.fromUserId] }
-    localStorage.setItem("golf-user", JSON.stringify(updatedCurrentUser))
+      if (friendError) return false
 
-    refreshFriends()
-    return true
+      await refreshFriends()
+      return true
+    } catch (error) {
+      console.error("[v0] Error accepting friend request:", error)
+      return false
+    }
   }
 
   const declineFriendRequest = async (requestId: string): Promise<boolean> => {
-    const allRequests = JSON.parse(localStorage.getItem("golf-friend-requests") || "[]")
-    const updatedRequests = allRequests.map((req: FriendRequest) =>
-      req.id === requestId ? { ...req, status: "declined" as const } : req,
-    )
-    localStorage.setItem("golf-friend-requests", JSON.stringify(updatedRequests))
+    try {
+      const { error } = await supabase.from("friend_requests").update({ status: "declined" }).eq("id", requestId)
 
-    refreshFriends()
-    return true
+      if (error) return false
+
+      await refreshFriends()
+      return true
+    } catch (error) {
+      console.error("[v0] Error declining friend request:", error)
+      return false
+    }
   }
 
   const removeFriend = async (friendId: string): Promise<boolean> => {
-    const currentUser = JSON.parse(localStorage.getItem("golf-user") || "null")
-    if (!currentUser) return false
+    if (!user) return false
 
-    const allUsers = JSON.parse(localStorage.getItem("golf-users") || "[]")
-    const updatedUsers = allUsers.map((user: User) => {
-      if (user.id === currentUser.id) {
-        return { ...user, friends: user.friends.filter((id) => id !== friendId) }
-      }
-      if (user.id === friendId) {
-        return { ...user, friends: user.friends.filter((id) => id !== currentUser.id) }
-      }
-      return user
-    })
+    try {
+      const { error } = await supabase
+        .from("friends")
+        .delete()
+        .or(`and(user_id.eq.${user.id},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${user.id})`)
 
-    localStorage.setItem("golf-users", JSON.stringify(updatedUsers))
+      if (error) return false
 
-    const updatedCurrentUser = { ...currentUser, friends: currentUser.friends.filter((id: string) => id !== friendId) }
-    localStorage.setItem("golf-user", JSON.stringify(updatedCurrentUser))
-
-    refreshFriends()
-    return true
+      await refreshFriends()
+      return true
+    } catch (error) {
+      console.error("[v0] Error removing friend:", error)
+      return false
+    }
   }
 
-  const searchUsers = (query: string): User[] => {
-    if (!query.trim()) return []
+  const searchUsers = async (query: string): Promise<User[]> => {
+    if (!query.trim() || !user) return []
 
-    const allUsers = JSON.parse(localStorage.getItem("golf-users") || "[]")
-    const currentUser = JSON.parse(localStorage.getItem("golf-user") || "null")
+    try {
+      const { data: users, error } = await supabase
+        .from("profiles")
+        .select("id, email, display_name, balance, handicap, created_at")
+        .ilike("display_name", `%${query}%`)
+        .neq("id", user.id)
+        .limit(10)
 
-    return allUsers
-      .filter(
-        (user: User) =>
-          user.username.toLowerCase().includes(query.toLowerCase()) &&
-          user.id !== currentUser?.id &&
-          !currentUser?.friends.includes(user.id),
-      )
-      .slice(0, 10) // Limit to 10 results
+      if (error) return []
+
+      // Filter out existing friends
+      const friendIds = friends.map((f) => f.id)
+      const filteredUsers = users?.filter((u) => !friendIds.includes(u.id)) || []
+
+      return filteredUsers.map((u) => ({
+        id: u.id,
+        email: u.email || "",
+        username: u.display_name || "Unknown",
+        balance: Number(u.balance || 0),
+        handicap: u.handicap || 0,
+        friends: [],
+        createdAt: u.created_at || new Date().toISOString(),
+      }))
+    } catch (error) {
+      console.error("[v0] Error searching users:", error)
+      return []
+    }
   }
 
   const getFriendStats = (userId: string): FriendStats | null => {
