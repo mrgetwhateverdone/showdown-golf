@@ -8,7 +8,7 @@ export interface User {
   username: string
   balance: number
   friends: string[]
-  handicap?: string
+  handicap?: number
   homeCourse?: string
   createdAt: string
 }
@@ -18,102 +18,147 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<boolean>
   signup: (email: string, password: string, username: string) => Promise<boolean>
   logout: () => void
-  updateUser: (updates: Partial<User>) => void
+  updateUser: (updates: Partial<User>) => Promise<boolean>
   isLoading: boolean
+  token: string | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Check for existing user in localStorage
-    const savedUser = localStorage.getItem("golf-user")
-    if (savedUser) {
-      setUser(JSON.parse(savedUser))
+    // Check for existing token and user in localStorage
+    const savedToken = localStorage.getItem("golf-token")
+    if (savedToken) {
+      setToken(savedToken)
+      // Verify token and get user data
+      fetchUserData(savedToken)
+    } else {
+      setIsLoading(false)
     }
-    setIsLoading(false)
   }, [])
 
-  const updateUser = (updates: Partial<User>) => {
-    if (!user) return
+  const fetchUserData = async (authToken: string) => {
+    try {
+      const response = await fetch("/api/auth/me", {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      })
 
-    const updatedUser = { ...user, ...updates }
-    setUser(updatedUser)
-    localStorage.setItem("golf-user", JSON.stringify(updatedUser))
+      if (response.ok) {
+        const data = await response.json()
+        setUser(data.user)
+      } else {
+        // Token is invalid, clear it
+        localStorage.removeItem("golf-token")
+        setToken(null)
+      }
+    } catch (error) {
+      console.error("Failed to fetch user data:", error)
+      localStorage.removeItem("golf-token")
+      setToken(null)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-    // Also update in the users array
-    const users = JSON.parse(localStorage.getItem("golf-users") || "[]")
-    const userIndex = users.findIndex((u: User) => u.id === user.id)
-    if (userIndex !== -1) {
-      users[userIndex] = updatedUser
-      localStorage.setItem("golf-users", JSON.stringify(users))
+  const updateUser = async (updates: Partial<User>): Promise<boolean> => {
+    if (!token) return false
+
+    try {
+      setIsLoading(true)
+      const response = await fetch("/api/auth/update", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(updates),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setUser(data.user)
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error("Failed to update user:", error)
+      return false
+    } finally {
+      setIsLoading(false)
     }
   }
 
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true)
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      })
 
-    // Check if user exists in localStorage users
-    const users = JSON.parse(localStorage.getItem("golf-users") || "[]")
-    const existingUser = users.find((u: User) => u.email === email)
+      if (response.ok) {
+        const data = await response.json()
+        setUser(data.user)
+        setToken(data.token)
+        localStorage.setItem("golf-token", data.token)
+        setIsLoading(false)
+        return true
+      }
 
-    if (existingUser) {
-      setUser(existingUser)
-      localStorage.setItem("golf-user", JSON.stringify(existingUser))
       setIsLoading(false)
-      return true
+      return false
+    } catch (error) {
+      console.error("Login error:", error)
+      setIsLoading(false)
+      return false
     }
-
-    setIsLoading(false)
-    return false
   }
 
   const signup = async (email: string, password: string, username: string): Promise<boolean> => {
     setIsLoading(true)
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    try {
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password, username }),
+      })
 
-    // Check if user already exists
-    const users = JSON.parse(localStorage.getItem("golf-users") || "[]")
-    const existingUser = users.find((u: User) => u.email === email || u.username === username)
+      if (response.ok) {
+        const data = await response.json()
+        setUser(data.user)
+        setToken(data.token)
+        localStorage.setItem("golf-token", data.token)
+        setIsLoading(false)
+        return true
+      }
 
-    if (existingUser) {
+      setIsLoading(false)
+      return false
+    } catch (error) {
+      console.error("Signup error:", error)
       setIsLoading(false)
       return false
     }
-
-    // Create new user with $1,000 starting balance
-    const newUser: User = {
-      id: Date.now().toString(),
-      email,
-      username,
-      balance: 1000, // Free $1,000 starting balance
-      friends: [],
-      createdAt: new Date().toISOString(),
-    }
-
-    // Save to users array
-    users.push(newUser)
-    localStorage.setItem("golf-users", JSON.stringify(users))
-
-    // Set as current user
-    setUser(newUser)
-    localStorage.setItem("golf-user", JSON.stringify(newUser))
-
-    setIsLoading(false)
-    return true
   }
 
   const logout = () => {
     setUser(null)
-    localStorage.removeItem("golf-user")
+    setToken(null)
+    localStorage.removeItem("golf-token")
   }
 
   return (
@@ -125,6 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         updateUser,
         isLoading,
+        token,
       }}
     >
       {children}

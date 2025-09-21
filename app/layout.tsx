@@ -1,8 +1,5 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { GeistSans } from "geist/font/sans"
-import { GeistMono } from "geist/font/mono"
-import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "@/lib/auth"
 import { MatchProvider } from "@/lib/match"
 import { FriendsProvider } from "@/lib/friends"
@@ -22,7 +19,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
+      <body className="font-sans">
         <Suspense fallback={null}>
           <AuthProvider>
             <MatchProvider>
@@ -30,7 +27,6 @@ export default function RootLayout({
             </MatchProvider>
           </AuthProvider>
         </Suspense>
-        <Analytics />
       </body>
     </html>
   )
