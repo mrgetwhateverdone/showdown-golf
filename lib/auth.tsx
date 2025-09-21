@@ -74,6 +74,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error("[v0] Error fetching profile:", error)
+
+        if (error.code === "PGRST116") {
+          // No rows returned
+          console.log("[v0] Profile not found, creating new profile for user:", userId)
+
+          // Get user email from supabase auth
+          const {
+            data: { user: authUser },
+          } = await supabase.auth.getUser()
+          if (!authUser) {
+            console.error("[v0] No auth user found")
+            return
+          }
+
+          // Create basic profile
+          const { data: newProfile, error: createError } = await supabase
+            .from("profiles")
+            .insert({
+              id: userId,
+              email: authUser.email,
+              display_name: authUser.user_metadata?.display_name || authUser.email?.split("@")[0] || "User",
+              full_name: authUser.user_metadata?.full_name || authUser.user_metadata?.display_name || "User",
+              balance: 1000, // Starting balance
+              handicap: authUser.user_metadata?.handicap || 0,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .select()
+            .single()
+
+          if (createError) {
+            console.error("[v0] Error creating profile:", createError)
+            return
+          }
+
+          console.log("[v0] Profile created successfully:", newProfile)
+
+          // Use the newly created profile
+          if (newProfile) {
+            const userData: User = {
+              id: newProfile.id,
+              email: newProfile.email,
+              username: newProfile.display_name,
+              fullName: newProfile.full_name || newProfile.display_name,
+              balance: Number(newProfile.balance),
+              handicap: newProfile.handicap || 0,
+              homeCourse: newProfile.home_course,
+              friends: [],
+              createdAt: newProfile.created_at,
+            }
+            setUser(userData)
+          }
+        }
         return
       }
 

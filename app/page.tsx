@@ -76,10 +76,10 @@ export default function LandingPage() {
       })
     }
 
-    // if (success) {
-    //   console.log("[v0] Auth successful, redirecting to /app")
-    //   router.push("/app")
-    // }
+    if (success) {
+      console.log("[v0] Auth successful, redirecting to /app")
+      router.push("/app")
+    }
   }
 
   if (isLoading) {
