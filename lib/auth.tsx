@@ -161,7 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         password,
         options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/app`,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/app`,
           data: {
             display_name: username,
             full_name: fullName,
@@ -184,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSupabaseUser(data.user)
           await fetchUserProfile(data.user.id)
         } else {
-          console.log("[v0] No immediate session - auth state handler will manage")
+          console.log("[v0] No immediate session - user will be redirected via callback")
         }
 
         setIsLoading(false)

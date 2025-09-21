@@ -33,6 +33,10 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  if (request.nextUrl.pathname.startsWith("/auth/")) {
+    return supabaseResponse
+  }
+
   if (
     !user &&
     request.nextUrl.pathname.startsWith("/app") // Only protect /app routes
