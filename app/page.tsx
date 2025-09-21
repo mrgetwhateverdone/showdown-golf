@@ -18,6 +18,7 @@ export default function LandingPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [username, setUsername] = useState("")
+  const [fullName, setFullName] = useState("") // Added full name field for signup
   const { user, login, signup, isLoading } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
@@ -50,17 +51,31 @@ export default function LandingPage() {
         })
         return
       }
-      success = await signup(email, password, username)
+      if (!fullName.trim()) {
+        toast({
+          title: "Full Name Required",
+          description: "Please enter your full name",
+          variant: "destructive",
+        })
+        return
+      }
+      success = await signup(email, password, username, fullName)
       if (!success) {
         toast({
           title: "Signup Failed",
-          description: "User already exists",
+          description: "Email or username already exists",
           variant: "destructive",
         })
+        return
       }
+      toast({
+        title: "Account Created!",
+        description: "Welcome to Showdown Golf!",
+      })
     }
 
     if (success) {
+      console.log("[v0] Auth successful, redirecting to /app")
       router.push("/app")
     }
   }
@@ -89,16 +104,30 @@ export default function LandingPage() {
                 </div>
 
                 {!isLogin && (
-                  <div className="space-y-2">
-                    <Label htmlFor="username">Username</Label>
-                    <Input
-                      id="username"
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      required
-                    />
-                  </div>
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="fullName">Full Name</Label>
+                      <Input
+                        id="fullName"
+                        type="text"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        required
+                        placeholder="Enter your full name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="username">Username</Label>
+                      <Input
+                        id="username"
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        required
+                        placeholder="Choose a unique username"
+                      />
+                    </div>
+                  </>
                 )}
 
                 <div className="space-y-2">
@@ -109,6 +138,8 @@ export default function LandingPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
+                    minLength={6}
+                    placeholder="Enter your password"
                   />
                 </div>
 

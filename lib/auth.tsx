@@ -8,6 +8,7 @@ export interface User {
   id: string
   email: string
   username: string
+  fullName: string
   balance: number
   friends: string[]
   handicap?: number
@@ -19,7 +20,7 @@ interface AuthContextType {
   user: User | null
   supabaseUser: SupabaseUser | null
   login: (email: string, password: string) => Promise<boolean>
-  signup: (email: string, password: string, username: string) => Promise<boolean>
+  signup: (email: string, password: string, username: string, fullName: string) => Promise<boolean>
   logout: () => Promise<void>
   updateUser: (updates: Partial<User>) => Promise<boolean>
   isLoading: boolean
@@ -82,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: profile.id,
           email: profile.email,
           username: profile.display_name,
+          fullName: profile.full_name || profile.display_name,
           balance: Number(profile.balance),
           handicap: profile.handicap || 0,
           homeCourse: profile.home_course,
@@ -129,19 +131,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const signup = async (email: string, password: string, username: string): Promise<boolean> => {
+  const signup = async (email: string, password: string, username: string, fullName: string): Promise<boolean> => {
     setIsLoading(true)
 
     try {
-      console.log("[v0] Starting signup process", { email, username })
+      console.log("[v0] Starting signup process", { email, username, fullName })
+
+      const { data: existingUsername } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("display_name", username)
+        .maybeSingle()
+
+      if (existingUsername) {
+        console.log("[v0] Username already exists")
+        setIsLoading(false)
+        return false
+      }
+
+      const { data: existingEmail } = await supabase.from("profiles").select("id").eq("email", email).maybeSingle()
+
+      if (existingEmail) {
+        console.log("[v0] Email already exists")
+        setIsLoading(false)
+        return false
+      }
 
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/app`,
           data: {
             display_name: username,
+            full_name: fullName,
             handicap: 0,
           },
         },
@@ -156,9 +178,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.user) {
         console.log("[v0] Signup successful, user created:", data.user.id)
 
-        // For development, we might not have email confirmation enabled
-        // so we can immediately fetch the profile
         if (data.session) {
+          console.log("[v0] Session available immediately, setting user")
           setSupabaseUser(data.user)
           await fetchUserProfile(data.user.id)
         }
@@ -191,6 +212,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Map User fields to database fields
       const profileUpdates: any = {}
       if (updates.username) profileUpdates.display_name = updates.username
+      if (updates.fullName) profileUpdates.full_name = updates.fullName
       if (updates.balance !== undefined) profileUpdates.balance = updates.balance
       if (updates.handicap !== undefined) profileUpdates.handicap = updates.handicap
       if (updates.homeCourse !== undefined) profileUpdates.home_course = updates.homeCourse
