@@ -85,9 +85,33 @@ export default function ProfilePage() {
 
   const userStats = calculateUserStats()
 
-  const handleLogout = () => {
-    logout()
-    router.push("/")
+  const handleLogout = async () => {
+    try {
+      console.log("[v0] Saving user data before logout:", user)
+
+      // Ensure all user data is saved to database
+      if (user) {
+        await updateUser({
+          username: user.username,
+          fullName: user.fullName,
+          balance: user.balance,
+          handicap: user.handicap,
+          homeCourse: user.homeCourse,
+        })
+        console.log("[v0] User data saved successfully before logout")
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
+      console.log("[v0] Logging out user")
+      await logout()
+      router.push("/")
+    } catch (error) {
+      console.error("[v0] Error during logout:", error)
+      // Still logout even if save fails
+      await logout()
+      router.push("/")
+    }
   }
 
   return (
