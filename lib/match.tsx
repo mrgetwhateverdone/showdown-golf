@@ -423,7 +423,7 @@ export function MatchProvider({ children }: { children: ReactNode }) {
           current_hole: 1,
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           match_type: matchData.isPublic ? "public" : "private",
-          handicap_type: "handicapped",
+          handicap_type: "none",
           wager_type: "winner_takes_all",
         })
         .select()
