@@ -139,15 +139,32 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
 
       const stats: FriendStats[] = await Promise.all(
         profiles.map(async (profile) => {
-          // Get matches for this user
-          const { data: userMatches } = await supabase
+          // Get completed matches where profile is creator
+          const { data: createdMatches } = await supabase
             .from("matches")
             .select("id, winner, wager_amount, status")
-            .or(`created_by.eq."${profile.id}",match_participants.user_id.eq."${profile.id}"`)
+            .eq("created_by", profile.id)
             .eq("status", "completed")
 
-          const matchesPlayed = userMatches?.length || 0
-          const matchesWon = userMatches?.filter((m) => m.winner === profile.id).length || 0
+          // Get completed matches where profile is participant
+          const { data: participantMatches } = await supabase
+            .from("matches")
+            .select(`
+              id, 
+              winner, 
+              wager_amount, 
+              status,
+              match_participants!inner(user_id)
+            `)
+            .eq("match_participants.user_id", profile.id)
+            .eq("status", "completed")
+
+          // Combine and deduplicate matches
+          const allMatches = [...(createdMatches || []), ...(participantMatches || [])]
+          const uniqueMatches = Array.from(new Map(allMatches.map((match) => [match.id, match])).values())
+
+          const matchesPlayed = uniqueMatches.length
+          const matchesWon = uniqueMatches.filter((m) => m.winner === profile.id).length
 
           // Calculate total earnings from transactions
           const { data: transactions } = await supabase

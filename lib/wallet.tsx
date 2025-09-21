@@ -104,15 +104,31 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         .filter((t) => t.transactionType === "winnings")
         .reduce((sum, t) => sum + t.amount, 0)
 
-      // Get match statistics
-      const { data: matchStats } = await supabase
+      // Get matches where user is creator
+      const { data: createdMatches } = await supabase
         .from("matches")
         .select("id, winner, status")
-        .or(`created_by.eq."${user.id}",match_participants.user_id.eq."${user.id}"`)
+        .eq("created_by", user.id)
         .eq("status", "completed")
 
-      const matchesPlayed = matchStats?.length || 0
-      const matchesWon = matchStats?.filter((m) => m.winner === user.id).length || 0
+      // Get matches where user is participant
+      const { data: participantMatches } = await supabase
+        .from("matches")
+        .select(`
+          id, 
+          winner, 
+          status,
+          match_participants!inner(user_id)
+        `)
+        .eq("match_participants.user_id", user.id)
+        .eq("status", "completed")
+
+      // Combine and deduplicate matches
+      const allMatches = [...(createdMatches || []), ...(participantMatches || [])]
+      const uniqueMatches = Array.from(new Map(allMatches.map((match) => [match.id, match])).values())
+
+      const matchesPlayed = uniqueMatches.length
+      const matchesWon = uniqueMatches.filter((m) => m.winner === user.id).length
       const winRate = matchesPlayed > 0 ? (matchesWon / matchesPlayed) * 100 : 0
 
       setStats({
