@@ -85,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } = await supabase.auth.getUser()
           if (!authUser) {
             console.error("[v0] No auth user found")
+            setUser(null)
             return
           }
 
@@ -106,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (createError) {
             console.error("[v0] Error creating profile:", createError)
+            setUser(null)
             return
           }
 
@@ -125,7 +127,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               createdAt: newProfile.created_at,
             }
             setUser(userData)
+          } else {
+            setUser(null)
           }
+        } else {
+          setUser(null)
         }
         return
       }
@@ -140,13 +146,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           balance: Number(profile.balance),
           handicap: profile.handicap || 0,
           homeCourse: profile.home_course,
-          friends: [], // Will be populated by friends system
+          friends: [],
           createdAt: profile.created_at,
         }
         setUser(userData)
+      } else {
+        setUser(null)
       }
     } catch (error) {
       console.error("[v0] Error in fetchUserProfile:", error)
+      setUser(null)
     }
   }
 
