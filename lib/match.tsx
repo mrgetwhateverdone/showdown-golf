@@ -171,11 +171,15 @@ export function MatchProvider({ children }: { children: ReactNode }) {
     if (!user) return
 
     try {
-      const { data: matchesData, error } = await supabase
+      // Get matches where user is creator
+      const { data: createdMatches, error: createdError } = await supabase
         .from("matches")
         .select(`
           *,
-          match_participants!inner(user_id),
+          match_participants(
+            user_id,
+            profiles(display_name)
+          ),
           match_holes(
             id,
             hole_number,
@@ -189,16 +193,51 @@ export function MatchProvider({ children }: { children: ReactNode }) {
             )
           )
         `)
-        .or(`created_by.eq.${user.id},match_participants.user_id.eq.${user.id}`)
+        .eq("created_by", user.id)
         .order("created_at", { ascending: false })
 
-      if (error) {
-        console.error("[v0] Error fetching matches:", error)
+      if (createdError) {
+        console.error("[v0] Error fetching created matches:", createdError)
         return
       }
 
+      // Get matches where user is participant
+      const { data: participantMatches, error: participantError } = await supabase
+        .from("matches")
+        .select(`
+          *,
+          match_participants!inner(
+            user_id,
+            profiles(display_name)
+          ),
+          match_holes(
+            id,
+            hole_number,
+            par,
+            completed,
+            match_scores(
+              id,
+              player_id,
+              strokes,
+              confirmed
+            )
+          )
+        `)
+        .eq("match_participants.user_id", user.id)
+        .order("created_at", { ascending: false })
+
+      if (participantError) {
+        console.error("[v0] Error fetching participant matches:", participantError)
+        return
+      }
+
+      // Combine and deduplicate
+      const allMatches = [...(createdMatches || []), ...(participantMatches || [])]
+      const uniqueMatches = Array.from(new Map(allMatches.map((match) => [match.id, match])).values())
+      const matchData = uniqueMatches
+
       const transformedMatches: Match[] = await Promise.all(
-        matchesData.map(async (match) => {
+        matchData.map(async (match) => {
           // Get participants
           const { data: participants } = await supabase
             .from("match_participants")
